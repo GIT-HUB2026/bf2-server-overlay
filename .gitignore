@@ -1,0 +1,4 @@
+dist/
+build/pyi/
+__pycache__/
+state.json
