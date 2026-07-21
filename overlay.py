@@ -17,7 +17,7 @@ import tkinter as tk
 from queue import Queue, Empty
 from urllib.request import Request, urlopen
 
-VERSION = "1.0"
+VERSION = "1.1"
 CREDIT = "Made by ribbycag3 - free to share 2026"
 APP_NAME = "BF2 Server Overlay"
 EXE_NAME = "BF2 SERVER OVERLAY.exe"
@@ -38,6 +38,8 @@ SERVER_URL = "https://www.bf2hub.com/server/{}/"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) BF2ServerOverlay/1.0"
 REFRESH_SECONDS = 30
 MAX_RANKED_ROWS = 14
+HOVER_TTL = 30
+MAX_TEAM_ROWS = 40
 
 BG = "#0b0f14"
 PANEL = "#131a22"
@@ -54,6 +56,12 @@ COUNT_RE = re.compile(r'<td class="c">(\d+)/(\d+)</td>')
 MAP_RE = re.compile(r'mapname">(.*?)</td>')
 H3_RE = re.compile(r"<h3>(.*?)</h3>", re.S)
 PLAYER_ROW_RE = re.compile(r'<tr class="row')
+TEAM_SPLIT_RE = re.compile(r'class="pl_team_\d"')
+ARMY_RE = re.compile(r'title="([A-Z]{2,3})"')
+ROWCELL_RE = re.compile(r'<tr class="row[12][^"]*">(.*?)</tr>', re.S)
+NCELL_RE = re.compile(r'<td class="n">(.*?)</td>', re.S)
+PING_RE = re.compile(r'<td class="p">([^<]*)</td>')
+TAG_RE = re.compile(r"<[^>]+>")
 
 
 def fetch(url):
@@ -87,6 +95,24 @@ def parse_server(page, addr):
         "name": html.unescape(h3.group(1)).strip() if h3 else addr,
         "players": len(PLAYER_ROW_RE.findall(page)),
     }
+
+
+def parse_players(page):
+    """Both team columns of a server-detail page: [{'army', 'players': [(name, active)]}]."""
+    parts = TEAM_SPLIT_RE.split(page)
+    teams = []
+    for part in parts[1:3]:
+        army = ARMY_RE.search(part)
+        players = []
+        for row in ROWCELL_RE.findall(part):
+            ncell = NCELL_RE.search(row)
+            if not ncell:
+                continue
+            name = html.unescape(TAG_RE.sub("", ncell.group(1))).strip()
+            ping = PING_RE.search(row)
+            players.append((name, bool(ping and ping.group(1).strip() != "-")))
+        teams.append({"army": army.group(1) if army else "?", "players": players})
+    return teams
 
 
 def gather():
@@ -168,6 +194,15 @@ class Overlay:
         self.fetching = False
         self.next_at = time.time()
         self.drag = None
+        self.pop = None
+        self.pop_addr = None
+        self.pop_name = ""
+        self.pop_row = None
+        self.hover_addr = None
+        self.hover_after = None
+        self.hide_after = None
+        self.pcache = {}
+        self.pfetching = set()
 
         root.overrideredirect(True)
         root.attributes("-topmost", True)
@@ -269,14 +304,21 @@ class Overlay:
 
     def _poll(self):
         try:
-            data = self.q.get_nowait()
+            item = self.q.get_nowait()
         except Empty:
             pass
         else:
-            self.fetching = False
-            self.next_at = time.time() + REFRESH_SECONDS
-            self.root.after(REFRESH_SECONDS * 1000, self.start_fetch)
-            self._render(data)
+            if isinstance(item, tuple) and item[0] == "players":
+                _, addr, res = item
+                self.pfetching.discard(addr)
+                self.pcache[addr] = (time.time(), res)
+                if self.pop_addr == addr:
+                    self._pop_render(self.pop_name, res, self.pop_row)
+            else:
+                self.fetching = False
+                self.next_at = time.time() + REFRESH_SECONDS
+                self.root.after(REFRESH_SECONDS * 1000, self.start_fetch)
+                self._render(item)
         self.root.after(250, self._poll)
 
     def _tick(self):
@@ -292,7 +334,7 @@ class Overlay:
         self._section("UNRANKED · DOGFIGHT")
         if data["dogfight"]:
             for i, s in enumerate(data["dogfight"]):
-                self._row(i, s["name"], s["players"], None, name_w=40)
+                self._row(i, s, False, name_w=40)
         if data["dogfight_err"]:
             self._error(data["dogfight_err"])
 
@@ -302,7 +344,7 @@ class Overlay:
         elif data["ranked"] is not None:
             shown = data["ranked"][:MAX_RANKED_ROWS]
             for i, s in enumerate(shown):
-                self._row(i, s["name"], s["players"], s, name_w=27)
+                self._row(i, s, True, name_w=27)
             extra = data["ranked"][MAX_RANKED_ROWS:]
             if extra:
                 more = tk.Label(self.body, text=f"+{len(extra)} more servers · "
@@ -318,27 +360,147 @@ class Overlay:
         lbl = tk.Label(self.body, text=text, font=self.f_label, fg=ACC2, bg=BG, anchor="w")
         lbl.pack(fill="x", pady=(pad_top, 2))
 
-    def _row(self, i, name, players, ranked, name_w):
+    def _row(self, i, s, ranked, name_w):
         bg = PANEL if i % 2 == 0 else ROW_ALT
         row = tk.Frame(self.body, bg=bg)
         row.pack(fill="x")
-        tk.Label(row, text=trunc(name, name_w), font=self.f_row, fg=TXT, bg=bg,
+        tk.Label(row, text=trunc(s["name"], name_w), font=self.f_row, fg=TXT, bg=bg,
                  anchor="w", width=name_w).pack(side="left", padx=(6, 4), pady=1)
         if ranked:
-            count = f"{players}/{ranked['max']}"
-            tk.Label(row, text=trunc(ranked["map"], 20), font=self.f_row, fg=DIM, bg=bg,
+            count = f"{s['players']}/{s['max']}"
+            tk.Label(row, text=trunc(s["map"], 20), font=self.f_row, fg=DIM, bg=bg,
                      anchor="w", width=20).pack(side="right", padx=(4, 6))
         else:
-            count = str(players)
-        tk.Label(row, text=count, font=self.f_num, fg=ACC if players > 0 else DIM,
+            count = str(s["players"])
+        tk.Label(row, text=count, font=self.f_num, fg=ACC if s["players"] > 0 else DIM,
                  bg=bg, anchor="e", width=6).pack(side="right", padx=4)
+        for w in [row] + row.winfo_children():
+            w.bind("<Enter>", lambda e, a=s["addr"], n=s["name"], r=row:
+                   self._hover_enter(a, n, r))
+            w.bind("<Leave>", lambda e: self._hover_leave())
 
     def _error(self, msg, dim=False):
         tk.Label(self.body, text=trunc(msg, 60), font=("Segoe UI", 9),
                  fg=DIM if dim else RED, bg=BG, anchor="w").pack(fill="x")
 
+    # -- hover player popup ------------------------------------------------
+    def _hover_enter(self, addr, name, roww):
+        if self.hide_after:
+            self.root.after_cancel(self.hide_after)
+            self.hide_after = None
+        if self.hover_after:
+            self.root.after_cancel(self.hover_after)
+        self.hover_addr = addr
+        self.hover_after = self.root.after(
+            250, lambda: self._hover_show(addr, name, roww))
+
+    def _hover_leave(self):
+        if self.hover_after:
+            self.root.after_cancel(self.hover_after)
+            self.hover_after = None
+        if self.hide_after:
+            self.root.after_cancel(self.hide_after)
+        self.hide_after = self.root.after(150, self._hide_pop)
+
+    def _hide_pop(self):
+        self.hide_after = None
+        self.hover_addr = None
+        self.pop_addr = None
+        if self.pop:
+            self.pop.withdraw()
+
+    def _hover_show(self, addr, name, roww):
+        self.hover_after = None
+        if self.hover_addr != addr:
+            return
+        self.pop_addr = addr
+        self.pop_name = name
+        self.pop_row = roww
+        cached = self.pcache.get(addr)
+        if cached and time.time() - cached[0] <= HOVER_TTL:
+            self._pop_render(name, cached[1], roww)
+            return
+        self._pop_render(name, None, roww)
+        if addr not in self.pfetching:
+            self.pfetching.add(addr)
+
+            def work():
+                try:
+                    teams = parse_players(fetch(SERVER_URL.format(addr)))
+                    self.q.put(("players", addr, teams))
+                except Exception as e:
+                    self.q.put(("players", addr, str(e)))
+            threading.Thread(target=work, daemon=True).start()
+
+    def _pop_render(self, name, res, roww):
+        if self.pop is None:
+            self.pop = tk.Toplevel(self.root)
+            self.pop.overrideredirect(True)
+            self.pop.attributes("-topmost", True)
+            self.pop.attributes("-alpha", 0.96)
+            self.pop.configure(bg=ACC)
+            self.pop.withdraw()
+            self.pop_inner = tk.Frame(self.pop, bg=BG)
+            self.pop_inner.pack(padx=1, pady=1)
+        for w in self.pop_inner.winfo_children():
+            w.destroy()
+        tk.Label(self.pop_inner, text=trunc(name, 44), font=("Segoe UI", 9, "bold"),
+                 fg=ACC, bg=BG, anchor="w").pack(fill="x", padx=8, pady=(6, 2))
+        if res is None:
+            tk.Label(self.pop_inner, text="loading players…", font=("Segoe UI", 9),
+                     fg=DIM, bg=BG).pack(padx=8, pady=(0, 6), anchor="w")
+        elif isinstance(res, str):
+            tk.Label(self.pop_inner, text=trunc("error: " + res, 44),
+                     font=("Segoe UI", 9), fg=RED, bg=BG).pack(padx=8, pady=(0, 6), anchor="w")
+        elif sum(len(t["players"]) for t in res) == 0:
+            tk.Label(self.pop_inner, text="no players online", font=("Segoe UI", 9),
+                     fg=DIM, bg=BG).pack(padx=8, pady=(0, 6), anchor="w")
+        else:
+            cols = tk.Frame(self.pop_inner, bg=BG)
+            cols.pack(padx=8, pady=(0, 6), anchor="n")
+            for t in res:
+                col = tk.Frame(cols, bg=BG)
+                col.pack(side="left", anchor="n", padx=(0, 12))
+                tk.Label(col, text=f"{t['army']} · {len(t['players'])}",
+                         font=self.f_label, fg=ACC2, bg=BG).pack(anchor="w")
+                for pname, active in t["players"][:MAX_TEAM_ROWS]:
+                    tk.Label(col, text=trunc(pname, 20), font=("Segoe UI", 9),
+                             fg=TXT if active else DIM, bg=BG).pack(anchor="w")
+                extra = len(t["players"]) - MAX_TEAM_ROWS
+                if extra > 0:
+                    tk.Label(col, text=f"+{extra} more", font=("Segoe UI", 9),
+                             fg=DIM, bg=BG).pack(anchor="w")
+        self._place_pop(roww)
+        self.pop.deiconify()
+
+    def _place_pop(self, roww):
+        self.pop.update_idletasks()
+        pw, ph = self.pop.winfo_reqwidth(), self.pop.winfo_reqheight()
+        rx, ry = self.root.winfo_x(), self.root.winfo_y()
+        rw = self.root.winfo_width()
+        sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+        x = rx + rw + 6
+        if x + pw > sw:
+            x = rx - pw - 6
+        if x < 0:
+            x = max(0, sw - pw)
+        try:
+            y = roww.winfo_rooty()
+        except Exception:
+            y = ry
+        if y + ph > sh:
+            y = max(0, sh - ph - 10)
+        self.pop.geometry(f"+{x}+{y}")
+
 
 def main():
+    if "--players" in sys.argv:
+        addr = sys.argv[sys.argv.index("--players") + 1]
+        for t in parse_players(fetch(SERVER_URL.format(addr))):
+            print(f"{t['army']} - {len(t['players'])} players")
+            for n, active in t["players"]:
+                print("  ", n, "" if active else "(idle)")
+        return
     if "--once" in sys.argv:
         data = gather()
         print("DOGFIGHT:")
