@@ -1,6 +1,6 @@
 <p align="center"><img src="build/rmo-1024.png" width="120" alt="RMO logo"></p>
 
-# BF2 SERVER OVERLAY v1.1
+# BF2 SERVER OVERLAY v1.2
 
 Always-on-top popup showing live Battlefield 2 server info from [bf2hub.com](https://www.bf2hub.com) — see who's playing without alt-tabbing to a browser.
 
@@ -15,7 +15,7 @@ Always-on-top popup showing live Battlefield 2 server info from [bf2hub.com](htt
 
 ## Install (Windows)
 
-1. Download **BF2-SERVER-OVERLAY-Setup-1.1.exe** from [Releases](../../releases)
+1. Download **BF2-SERVER-OVERLAY-Setup-1.2.exe** from [Releases](../../releases)
 2. Run it. First run installs the app to `%LOCALAPPDATA%\Programs\BF2 Server Overlay` and creates a Desktop shortcut, then opens the overlay.
 
 > Windows SmartScreen will warn because the exe is unsigned — click **More info → Run anyway**. No Python or anything else needed; the exe is fully self-contained.
@@ -25,6 +25,7 @@ Always-on-top popup showing live Battlefield 2 server info from [bf2hub.com](htt
 - Drag it anywhere by the title bar — it remembers its position
 - `⟳` = refresh now · `✕` or `Esc` = close
 - Stays on top of other windows (shows over BF2 in windowed/borderless mode)
+- Single-instance: launching it again just focuses the overlay that's already open
 
 ## Run from source
 

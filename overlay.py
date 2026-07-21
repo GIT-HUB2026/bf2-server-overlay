@@ -4,6 +4,7 @@ Ranked populated servers (name / players / map) + the three deranked
 dogfight servers (name / players). Data scraped from bf2hub.com.
 Run with --once for a console parse test (no GUI).
 """
+import ctypes
 import html
 import json
 import os
@@ -17,7 +18,7 @@ import tkinter as tk
 from queue import Queue, Empty
 from urllib.request import Request, urlopen
 
-VERSION = "1.1"
+VERSION = "1.2"
 CREDIT = "Made by ribbycag3 - free to share 2026"
 APP_NAME = "BF2 Server Overlay"
 EXE_NAME = "BF2 SERVER OVERLAY.exe"
@@ -161,6 +162,20 @@ def trunc(s, n):
     return s if len(s) <= n else s[: n - 1] + "…"
 
 
+def another_instance_running():
+    """Windows named mutex — True if an overlay already holds it."""
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateMutexW(None, False, "BF2ServerOverlay_SingleInstance")
+    return ctypes.get_last_error() == 183  # ERROR_ALREADY_EXISTS
+
+
+def focus_existing():
+    u32 = ctypes.windll.user32
+    hwnd = u32.FindWindowW(None, "BF2 LIVE SERVERS")
+    if hwnd:
+        u32.SetForegroundWindow(hwnd)
+
+
 def self_install():
     """First run of the frozen exe from outside the install dir: copy the exe
     to %LOCALAPPDATA%\\Programs and (re)point a Desktop shortcut at it."""
@@ -204,6 +219,7 @@ class Overlay:
         self.pcache = {}
         self.pfetching = set()
 
+        root.title("BF2 LIVE SERVERS")
         root.overrideredirect(True)
         root.attributes("-topmost", True)
         root.attributes("-alpha", 0.94)
@@ -513,6 +529,9 @@ def main():
             print(f"  {s['players']:>3}/{s['max']:<3} {s['name'][:40]:<40} {s['map']}")
         if data["ranked_err"]:
             print("  ERR:", data["ranked_err"])
+        return
+    if another_instance_running():
+        focus_existing()
         return
     self_install()
     root = tk.Tk()
