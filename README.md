@@ -1,6 +1,6 @@
 <p align="center"><img src="build/rmo-1024.png" width="120" alt="RMO logo"></p>
 
-# BF2 SERVER OVERLAY v1.2
+# BF2 SERVER OVERLAY v1.3
 
 Always-on-top popup showing live Battlefield 2 server info from [bf2hub.com](https://www.bf2hub.com) — see who's playing without alt-tabbing to a browser.
 
@@ -8,14 +8,14 @@ Always-on-top popup showing live Battlefield 2 server info from [bf2hub.com](htt
 
 ## What it shows
 
-- **UNRANKED · DOGFIGHT** — the three deranked dogfight servers (name + live player count)
+- **UNRANKED · DOGFIGHT** — the deranked dogfight servers plus the heli 2v2 servers (name + live player count)
 - **RANKED · POPULATED** — every ranked server with players, busiest first: name, players (e.g. 34/64), current map
 - **Hover any server** — a panel pops up beside the overlay (whichever side has room) listing the players on both teams, live from that server's page; idle/placeholder entries shown dimmed
 - Auto-refreshes every 30 seconds, with a countdown and a manual refresh button
 
 ## Install (Windows)
 
-1. Download **BF2-SERVER-OVERLAY-Setup-1.2.exe** from [Releases](../../releases)
+1. Download **BF2-SERVER-OVERLAY-Setup-1.3.exe** from [Releases](../../releases)
 2. Run it. First run installs the app to `%LOCALAPPDATA%\Programs\BF2 Server Overlay` and creates a Desktop shortcut, then opens the overlay.
 
 > Windows SmartScreen will warn because the exe is unsigned — click **More info → Run anyway**. No Python or anything else needed; the exe is fully self-contained.

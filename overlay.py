@@ -18,7 +18,7 @@ import tkinter as tk
 from queue import Queue, Empty
 from urllib.request import Request, urlopen
 
-VERSION = "1.2"
+VERSION = "1.3"
 CREDIT = "Made by ribbycag3 - free to share 2026"
 APP_NAME = "BF2 Server Overlay"
 EXE_NAME = "BF2 SERVER OVERLAY.exe"
@@ -34,6 +34,8 @@ DOGFIGHT_ADDRS = [
     "138.197.130.124:16569",
     "173.234.79.175:11000",
     "45.76.81.207:16571",
+    "152.67.55.56:16568",
+    "45.76.95.172:16567",
 ]
 SERVER_URL = "https://www.bf2hub.com/server/{}/"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) BF2ServerOverlay/1.0"
